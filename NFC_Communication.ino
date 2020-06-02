@@ -110,9 +110,9 @@ void setup() {
   
   key = false;
   // Instantiate the data to send to the module for tag detection 
-  byte tagdetdata[] = {0x0B, 0x21, 0x00, 0x79, 0x01, 0x18, 0x00, 0x20, 0x60, 0x60, 0x64, 0x74, 0x3F, 0x08}
+  byte tagdetdata[] = {0x0B, 0x21, 0x00, 0x79, 0x01, 0x18, 0x00, 0x20, 0x60, 0x60, 0x64, 0x74, 0x3F, 0x08};
   while(!key){ // Loop until a tag has been detected
-    resp = communicate(0x07, 0x0E, tagdetdatat);
+    resp = communicate(0x07, 0x0E, tagdetdata);
     if(*(resp + 2) == 0x02){
       key = true; // Check the received data for feedback on the completion of tag detection
       Serial.print("Tag detection successful\n");
@@ -142,17 +142,29 @@ void setup() {
       
       // Print the UID
       Serial.print("UID of the tag:\n");
-      for(int i = 9, i > 1, i--){
-        Serial.print("0x%d", *(resp + i + 2));
+      for(int i = 9; i > 1; i--){
+        Serial.print("0x");
+        Serial.print( *(resp + i + 2));
+        Serial.print(" ");
       }
       Serial.print("\n");
 
       // Print the memory size if the information was available
       if(*(resp + 3) & 0b00000100 != 0){
         if(infodata[0] == 2){
-          Serial.print("The device has %d blocks of %d bytes of memory", (*(resp + 14) + 1), (*(resp + 15) + 1));
+          Serial.print("The device has ");
+          Serial.print(*(resp + 14) + 1);
+          Serial.print(" blocks of ");
+          Serial.print(*(resp + 15) + 1);
+          Serial.print(" bytes of memory\n");
         }
-        else Serial.print("The device has %d blocks of %d bytes of memory", (*(resp + 15) * sq(16) + *(resp + 14) + 1), (*(resp + 16) + 1));
+        else {
+          Serial.print("The device has ");
+          Serial.print(*(resp + 15) * sq(16) + *(resp + 14) + 1);
+          Serial.print(" blocks of ");
+          Serial.print(*(resp + 16) + 1);
+          Serial.print(" bytes of memory\n");
+        }
       }
       else Serial.print("Could not access the memory size of the device");
     }
