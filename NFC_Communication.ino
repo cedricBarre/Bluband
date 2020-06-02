@@ -28,6 +28,7 @@ const byte rstctl = 1; // Control byte to reset the CR95HF
  * length in number of bytes of the data from the response and the rest of the array contains the byte of data from the 
  * response.
  */
+
 byte * communicate(byte cmd, byte len, byte data[]){
   bool ready = false;
   byte resp = 0;
@@ -71,6 +72,8 @@ byte * communicate(byte cmd, byte len, byte data[]){
 }
 
 void setup() {
+
+  Serial.begin(9600);
   
   pinMode(DIN, OUTPUT); // Set the Interrupt line as an output
   pinMode(SS_0, OUTPUT); // Set the communication select line as an output
@@ -89,15 +92,72 @@ void setup() {
   SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
   digitalWrite(SS, HIGH);
 
+  Serial.print("SPI set up/n");
+  
   // Set the NFC communication protocol for the ISO/IEC 15693 (communication protocol for the Dexcom G6 and Freestyle Libre)
-  bool protoSet = false;
+  bool key = false;
   byte *resp; 
-  byte data[] = {0x01, 0x01};
-  while(!protoSet){ // Loop until the protocol has properly been established
-    resp = communicate(0x02, 0x02, data); // Send the command to set the protocol
-    if(*(resp + 1) == 0) protoSet = true; // Check the received data as feedback on the completion of protocol setting
+  byte protodata[] = {0x01, 0x01};
+  while(!key){ // Loop until the protocol has properly been established
+    resp = communicate(0x02, 0x02, protodata); // Send the command to set the protocol
+    if(*(resp + 1) == 0) {
+      key = true; // Check the received data for feedback on the completion of protocol setting
+      Serial.print("Protocol setting successful\n");
+    }
+    else Serial.print("Protocol setting failed, running proceedure again\n");
     delay(1);
   }
+  
+  key = false;
+  // Instantiate the data to send to the module for tag detection 
+  byte tagdetdata[] = {0x0B, 0x21, 0x00, 0x79, 0x01, 0x18, 0x00, 0x20, 0x60, 0x60, 0x64, 0x74, 0x3F, 0x08}
+  while(!key){ // Loop until a tag has been detected
+    resp = communicate(0x07, 0x0E, tagdetdatat);
+    if(*(resp + 2) == 0x02){
+      key = true; // Check the received data for feedback on the completion of tag detection
+      Serial.print("Tag detection successful\n");
+    }
+    else {
+      Serial.print("No tags detected, running proceedure again\n");
+      delay(3000);
+    }
+  }
+
+  key = false;
+  // Let's now poll the tag for information and extract its UID and its memory size
+  byte infodata[] = {0x02, 0x2B}; // Data for sending information to a tag
+  while(!key){ // Loop until there are no errors in the communication
+    resp = communicate(0x04, 0x02, infodata);
+    if(*(resp + 2) & 0b00001001 == 1){ // Check to make sure there are no errors in the communication due to noise or disturbances
+      Serial.print("Errors in communication for information, running procedure again\n");
+      delay(2000);
+    }
+    else if (*(resp + 2) & 0b00001001 == 8 || *(resp + 2) & 0b00001001 == 9){ // Check if the tag has a larger memory than expected
+      Serial.print("Protocol was extended, changing the flags for larger memory since the tag has large memory\n");
+      infodata[0] = 0x0A; // Change the data sent to the tag for the next loop to accommodate larger memory 
+    }
+    else { // Else, there are no error or complications
+      key = true;
+      Serial.print("No errors during communication\n");
+      
+      // Print the UID
+      Serial.print("UID of the tag:\n");
+      for(int i = 9, i > 1, i--){
+        Serial.print("0x%d", *(resp + i + 2));
+      }
+      Serial.print("\n");
+
+      // Print the memory size if the information was available
+      if(*(resp + 3) & 0b00000100 != 0){
+        if(infodata[0] == 2){
+          Serial.print("The device has %d blocks of %d bytes of memory", (*(resp + 14) + 1), (*(resp + 15) + 1));
+        }
+        else Serial.print("The device has %d blocks of %d bytes of memory", (*(resp + 15) * sq(16) + *(resp + 14) + 1), (*(resp + 16) + 1));
+      }
+      else Serial.print("Could not access the memory size of the device");
+    }
+  }
+  
 
 
 }
